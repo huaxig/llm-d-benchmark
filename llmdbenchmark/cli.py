@@ -5,13 +5,12 @@ plan / standup / teardown / run / experiment subcommands.
 """
 
 import argparse
+import json
 import logging
 import os
 import shutil
 import sys
-import json
 import tempfile
-import time
 from pathlib import Path
 
 import yaml as _yaml
@@ -35,21 +34,12 @@ from llmdbenchmark.exceptions.exceptions import TemplateError
 from llmdbenchmark.parser.render_plans import RenderPlans
 from llmdbenchmark.parser.version_resolver import VersionResolver
 from llmdbenchmark.parser.cluster_resource_resolver import ClusterResourceResolver
-from llmdbenchmark.executor.step import Phase
-from llmdbenchmark.executor.context import ExecutionContext
-from llmdbenchmark.executor.step_executor import StepExecutor
-from llmdbenchmark.standup.steps import get_standup_steps
-from llmdbenchmark.smoketests.steps import get_smoketest_steps
-from llmdbenchmark.teardown.steps import get_teardown_steps
 
-from llmdbenchmark.run.steps import get_run_steps
-from llmdbenchmark.executor.command import CommandExecutor
-
-
-class PhaseError(Exception):
-    """Raised when a lifecycle phase (standup/run/teardown) fails."""
-
-    pass
+from llmdbenchmark.phases.standup import execute_standup
+from llmdbenchmark.phases.smoketest import execute_smoketest
+from llmdbenchmark.phases.teardown import execute_teardown
+from llmdbenchmark.phases.run import execute_run
+from llmdbenchmark.phases.experiment import execute_experiment
 
 
 def setup_workspace(
@@ -72,7 +62,7 @@ def dispatch_cli(args: argparse.Namespace, logger: logging.Logger) -> None:
 
     # Experiment command manages its own rendering per setup treatment
     if args.command == Command.EXPERIMENT.value:
-        _execute_experiment(args, logger)
+        execute_experiment(args, logger)
         return
 
     if args.command in (
@@ -136,13 +126,13 @@ def dispatch_cli(args: argparse.Namespace, logger: logging.Logger) -> None:
         _render_helm_manifests(config.plan_dir, logger)
 
     if args.command == Command.STANDUP.value:
-        _execute_standup(args, logger, render_plan_errors)
+        execute_standup(args, logger, render_plan_errors)
 
     if args.command == Command.SMOKETEST.value:
-        _execute_smoketest(args, logger, render_plan_errors)
+        execute_smoketest(args, logger, render_plan_errors)
 
     if args.command == Command.TEARDOWN.value:
-        _execute_teardown(args, logger, render_plan_errors)
+        execute_teardown(args, logger, render_plan_errors)
 
     if args.command == Command.RUN.value:
         _execute_run(args, logger, render_plan_errors)
