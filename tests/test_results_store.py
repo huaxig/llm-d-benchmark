@@ -69,6 +69,8 @@ class DummyLogger:
     def log_error(self, msg): pass
     def log_warning(self, msg): pass
     def log_debug(self, msg): pass
+    def log_plain(self, msg, emoji=None):
+        print(msg)
 
 class TestCLIStatus:
     """Grouped tests for the results status command covering all sub-paths."""
@@ -182,10 +184,10 @@ def test_gcs_client_push(mock_storage, tmp_path):
     report_file.touch()
     
     client = GCSClient()
-    metadata = {"scenario": "test", "model": "test", "hardware": "test", "run_uid": "123"}
+    full_uri = "gs://bucket/default/test/test/test/123"
     
-    dest = client.push("gs://bucket", str(tmp_path), metadata)
-    assert dest == "gs://bucket/default/test/test/test/123"
+    uploaded_count = client.push(full_uri, str(tmp_path))
+    assert uploaded_count == 1
     mock_blob.upload_from_filename.assert_called_with(str(report_file))
 
 def test_cli_results_push():
@@ -204,7 +206,7 @@ def test_cli_results_pull(mock_root):
     args = argparse.Namespace(results_command="pull", remote="prod", run_uid="123", dest="/tmp/dest")
     logger = DummyLogger()
     
-    with patch("llmdbenchmark.result_store.gcs.GCSClient.ls", return_value=[{"run_uid": "123", "path": "gs://dummy"}]):
+    with patch("llmdbenchmark.result_store.gcs.GCSClient.ls", return_value=["default/scenario/model/hardware/123/report_v0.2.yaml"]):
         with patch("llmdbenchmark.result_store.gcs.GCSClient.pull"):
             results.execute(args, logger)
 
