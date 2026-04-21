@@ -5,6 +5,7 @@ import urllib.parse
 import requests
 from llmdbenchmark.exceptions.exceptions import ConfigurationError
 from llmdbenchmark.result_store.base_client import StorageClient
+from llmdbenchmark.result_store.gcs import parse_gcs_uri
 from pathlib import Path
 
 class GCSProxyClient(StorageClient):
@@ -19,21 +20,12 @@ class GCSProxyClient(StorageClient):
              )
         self.session = requests.Session()
 
-    def _parse_uri(self, uri: str) -> tuple[str, str]:
-        """Parses gs://bucket/prefix into (bucket, prefix)."""
-        if not uri.startswith("gs://"):
-            raise ValueError(f"Invalid GCS URI: {uri}")
-        parts = uri[5:].split("/", 1)
-        bucket = parts[0]
-        prefix = parts[1] if len(parts) > 1 else ""
-        return bucket, prefix
-
     def _get_bucket_uri(self, bucket: str) -> str:
         return f"{self.prism_url}/api/gcs/storage/v1/b/{bucket}"
 
     def ls(self, uri: str) -> list[str]:
         """Lists object names under the given URI."""
-        bucket_name, prefix = self._parse_uri(uri)
+        bucket_name, prefix = parse_gcs_uri(uri)
         url = f"{self._get_bucket_uri(bucket_name)}/o"
         params = {}
         if prefix:
@@ -55,7 +47,7 @@ class GCSProxyClient(StorageClient):
 
     def exists(self, uri: str) -> bool:
         """Checks if any object exists with the given URI prefix."""
-        bucket_name, prefix = self._parse_uri(uri)
+        bucket_name, prefix = parse_gcs_uri(uri)
         url = f"{self._get_bucket_uri(bucket_name)}/o"
         params = {"prefix": prefix, "maxResults": 1}
         
@@ -69,7 +61,7 @@ class GCSProxyClient(StorageClient):
 
     def pull(self, uri: str, dest_dir: str) -> int:
         """Pulls all objects from URI to dest_dir."""
-        bucket_name, prefix = self._parse_uri(uri)
+        bucket_name, prefix = parse_gcs_uri(uri)
         dest_path = Path(dest_dir)
         dest_path.mkdir(parents=True, exist_ok=True)
         

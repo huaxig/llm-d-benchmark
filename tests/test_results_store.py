@@ -8,6 +8,7 @@ from llmdbenchmark.result_store.store import StoreManager, StoreNotFound
 from llmdbenchmark.result_store.config import ConfigManager
 from llmdbenchmark.result_store.workspace import WorkspaceManager
 from llmdbenchmark.interface import results
+from llmdbenchmark.result_store.gcs import parse_gcs_uri
 
 def test_store_initialization(tmp_path):
     store_dir, created = StoreManager.init_store(target_dir=tmp_path)
@@ -163,13 +164,12 @@ def test_cli_add_interactive_empty_abort(mock_root, tmp_path):
 
 from llmdbenchmark.result_store.gcs import GCSClient
 
-def test_gcs_client_parse_uri():
-    client = GCSClient()
-    bucket, prefix = client._parse_uri("gs://my-bucket/some/path")
+def test_parse_gcs_uri():
+    bucket, prefix = parse_gcs_uri("gs://my-bucket/some/path")
     assert bucket == "my-bucket"
     assert prefix == "some/path"
     
-    bucket, prefix = client._parse_uri("gs://my-bucket")
+    bucket, prefix = parse_gcs_uri("gs://my-bucket")
     assert bucket == "my-bucket"
     assert prefix == ""
 
@@ -194,27 +194,36 @@ def test_cli_results_push():
     args = argparse.Namespace(results_command="push", remote="prod", path=None, group="default")
     logger = DummyLogger()
     
-    with patch("llmdbenchmark.result_store.gcs.GCSClient.exists", return_value=False):
-        with patch("llmdbenchmark.result_store.gcs.GCSClient.push", return_value="gs://dest"):
-            with patch("llmdbenchmark.result_store.store.StoreManager.find_store_root", return_value=Path("/tmp")):
-                with patch("llmdbenchmark.result_store.workspace.WorkspaceManager.list_staged", return_value=[{"status": "staged", "path": "/tmp/dummy", "run_uid": "123"}]):
-                    with patch("llmdbenchmark.result_store.workspace.WorkspaceManager.remove_workspace"):
-                        results.execute(args, logger)
+    mock_client = MagicMock()
+    mock_client.exists.return_value = False
+    mock_client.push.return_value = "gs://dest"
+    
+    with patch("llmdbenchmark.result_store.commands.push.get_storage_client", return_value=mock_client):
+        with patch("llmdbenchmark.result_store.store.StoreManager.find_store_root", return_value=Path("/tmp")):
+            with patch("llmdbenchmark.result_store.workspace.WorkspaceManager.list_staged", return_value=[{"status": "staged", "path": "/tmp/dummy", "run_uid": "123"}]):
+                with patch("llmdbenchmark.result_store.workspace.WorkspaceManager.remove_workspace"):
+                    results.execute(args, logger)
 
 @patch("llmdbenchmark.result_store.store.StoreManager.find_store_root", return_value=Path("/tmp"))
 def test_cli_results_pull(mock_root):
     args = argparse.Namespace(results_command="pull", remote="prod", run_uid="123", dest="/tmp/dest")
     logger = DummyLogger()
     
-    with patch("llmdbenchmark.result_store.gcs.GCSClient.ls", return_value=["default/scenario/model/hardware/123/report_v0.2.yaml"]):
-        with patch("llmdbenchmark.result_store.gcs.GCSClient.pull"):
-            results.execute(args, logger)
+    mock_client = MagicMock()
+    mock_client.ls.return_value = ["default/scenario/model/hardware/123/report_v0.2.yaml"]
+    mock_client.pull.return_value = ("/tmp/dest/123", 1)
+    
+    with patch("llmdbenchmark.result_store.commands.pull.get_storage_client", return_value=mock_client):
+        results.execute(args, logger)
 
 def test_cli_push_already_exists_abort():
     args = argparse.Namespace(results_command="push", remote="prod", path=None, group="default")
     logger = DummyLogger()
     
-    with patch("llmdbenchmark.result_store.gcs.GCSClient.exists", return_value=True):
+    mock_client = MagicMock()
+    mock_client.exists.return_value = True
+    
+    with patch("llmdbenchmark.result_store.commands.push.get_storage_client", return_value=mock_client):
         with patch("sys.stdout.isatty", return_value=False):
             with patch("llmdbenchmark.result_store.store.StoreManager.find_store_root", return_value=Path("/tmp")):
                 with patch("llmdbenchmark.result_store.workspace.WorkspaceManager.list_staged", return_value=[{"status": "staged", "path": "/tmp/dummy", "run_uid": "123"}]):
